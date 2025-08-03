@@ -7,7 +7,6 @@ from supabase import create_client, SupabaseException
 from dotenv import load_dotenv
 import bcrypt
 import pandas as pd
-## Removed unused sklearn imports
 load_dotenv()
 
 app = Flask(__name__)
@@ -204,7 +203,6 @@ def sign_out():
     flash('You have been signed out.', 'success')
     return redirect(url_for('index'))
 
-## Removed /predict route and RandomForest logic
 
 if __name__ == '__main__':
     app.run(debug=True)
