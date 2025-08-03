@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <!-- Who We Are Section -->
+  <section class="py-20 px-6">
+    <div class="max-w-6xl mx-auto text-center">
+      <h2 class="text-4xl font-extrabold mb-6">Who We Are</h2>
+      <p class="text-xl text-gray-700 max-w-3xl mx-auto mb-16">
+        Using AI to bring smart agriculture to every farmer. We believe that understanding your soil is the first step towards sustainable and productive farming.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+        <!-- Mission Text -->
+        <div class="text-left">
+          <h3 class="text-2xl font-bold mb-4">Our Mission</h3>
+          <p class="mb-4">
+            We're dedicated to revolutionizing agriculture through cutting-edge AI technology. Our soil classification system empowers farmers with instant, accurate insights about their land.
+          </p>
+          <p>
+            By making soil analysis accessible and affordable, we're helping create a more sustainable future for farming communities worldwide.
+          </p>
+        </div>
+        <!-- AI-Powered Box -->
+        <div class="bg-gradient-to-br from-green-100 to-blue-100 rounded-2xl p-10 flex flex-col items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-green-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18v3m0-3a4 4 0 004-4H8a4 4 0 004 4zm0 0a4 4 0 01-4-4h8a4 4 0 01-4 4z" />
+          </svg>
+          <h4 class="text-xl font-semibold text-gray-800">AI-Powered Analysis</h4>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

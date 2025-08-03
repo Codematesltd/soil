@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up | Agrivision{% endblock %}
+
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+    body { font-family: 'Inter', sans-serif; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Sign Up Form -->
+<div class="flex justify-center items-center min-h-screen pt-24 pb-8">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md mx-4">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">Create Account</h2>
+        <p class="text-center text-gray-600 mb-8">Join the Agrivision farming community</p>
+        <form id="signupForm" class="space-y-6" method="POST" action="{{ url_for('sign_up') }}">
+            <div>
+                <label class="block mb-2 font-medium text-gray-700">Name</label>
+                <input type="text" id="name" name="name" required minlength="2" maxlength="100"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200" 
+                       placeholder="Enter your name" />
+            </div>
+
+            <div>
+                <label class="block mb-2 font-medium text-gray-700">Email</label>
+                <input type="email" id="email" name="email" required 
+                       pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200" 
+                       placeholder="Enter your email" />
+            </div>
+
+            <div>
+                <label class="block mb-2 font-medium text-gray-700">Password</label>
+                <input type="password" id="password" name="password" required 
+                       minlength="8"
+                       pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}"
+                       title="Must contain at least one number, one uppercase and lowercase letter, one special character, and at least 8 characters"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200" 
+                       placeholder="Enter your password" />
+                <p class="text-sm text-gray-500 mt-1">Password must be at least 8 characters long with numbers, uppercase, lowercase, and special characters.</p>
+            </div>
+
+            <div>
+                <label class="block mb-2 font-medium text-gray-700">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" required 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200" 
+                       placeholder="Confirm your password" />
+            </div>
+
+            <button type="submit" 
+                    class="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 transition duration-200 transform hover:scale-[1.02]">
+                Create Account
+            </button>
+        </form>
+
+        <div class="text-center mt-6">
+            <span class="text-gray-600">Already have an account? </span>
+            <a href="{{ url_for('sign_in') }}" class="text-green-600 font-semibold hover:text-green-700 hover:underline transition duration-200">Sign in</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

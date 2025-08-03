@@ -1,0 +1,14 @@
+flask==2.3.3
+numpy==1.24.3
+tensorflow==2.13.0
+supabase==1.0.3
+python-dotenv==1.0.0
+bcrypt==4.0.1
+pandas==2.0.3
+Werkzeug==2.3.7
+Pillow==10.0.0  # Required for image processing
+gunicorn==21.2.0  # For production deployment
+python-jose==3.3.0  # For JWT handling with Supabase
+requests==2.31.0  # Required by Supabase client
+
+## pip install -r requirements.txt to install these dependencies
