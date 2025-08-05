@@ -3,11 +3,10 @@ import os
 import numpy as np
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.models import load_model
-from supabase import create_client, SupabaseException
+from supabase import create_client
 from dotenv import load_dotenv
 import bcrypt
 import pandas as pd
-## Removed unused sklearn imports
 load_dotenv()
 
 app = Flask(__name__)
@@ -28,7 +27,7 @@ if not supabase_url or not supabase_key:
 
 try:
     supabase = create_client(supabase_url, supabase_key)
-except SupabaseException as e:
+except Exception as e:
     raise ValueError(f"Failed to initialize Supabase client: {str(e)}")
 
 def get_supabase_client():
@@ -126,11 +125,21 @@ def contact():
 
 # Middleware to check authentication for protected routes
 @app.before_request
+
+
 def check_auth():
     protected_routes = ['prediction', 'contact']
     if request.endpoint in protected_routes and 'user' not in session:
-        flash('Please sign in to access this feature.', 'warning')
+        # Do not flash for contact page, only redirect
+        if request.endpoint == 'contact':
+            return redirect(url_for('sign_in'))
+        # Only flash if not already on sign-in page
+        if request.endpoint != 'sign_in':
+            if not session.get('_flashed_signin_warning'):
+                flash('Please sign in to access this feature.', 'warning')
+                session['_flashed_signin_warning'] = True
         return redirect(url_for('sign_in'))
+    session.pop('_flashed_signin_warning', None)
 
 @app.route('/sign-in', methods=['GET', 'POST'])
 def sign_in():
@@ -204,7 +213,6 @@ def sign_out():
     flash('You have been signed out.', 'success')
     return redirect(url_for('index'))
 
-## Removed /predict route and RandomForest logic
 
 if __name__ == '__main__':
     app.run(debug=True)
