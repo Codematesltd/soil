@@ -5,7 +5,9 @@
 {% block extra_css %}
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-    body { font-family: 'Inter', sans-serif; }
+    body {
+        font-family: 'Inter', sans-serif;
+    }
 </style>
 {% endblock %}
 
@@ -19,30 +21,201 @@
         <!-- Upload -->
         <div class="bg-white rounded-lg shadow p-8">
             <h3 class="text-xl font-bold mb-6">Upload Image</h3>
-            <form method="post" enctype="multipart/form-data">
-                <div class="border-2 border-dashed border-green-300 p-6 rounded text-center">
+            <form id="predict-form" method="post" enctype="multipart/form-data">
+                <div id="drop-zone" class="border-2 border-dashed border-green-300 p-6 rounded text-center transition-colors">
                     <div class="text-green-600 text-4xl mb-2">⬆️</div>
                     <p class="text-sm text-gray-600 mb-4">Upload image of soil or land (jpg/png)</p>
-                    <input type="file" name="image" class="mb-4" accept="image/*" required />
-                    <button type="submit" class="w-full bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 mt-2">Predict Soil Type</button>
+                    <input id="file-input" type="file" name="image" class="mb-4" accept="image/*" required />
+                    <div id="preview" class="my-3 hidden">
+                        <img id="preview-img" src="" alt="Preview" class="mx-auto max-h-60 rounded border" />
+                    </div>
+                    <button id="submit-btn" type="submit"
+                        class="w-full bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 mt-2">Predict Soil
+                        Type</button>
                 </div>
             </form>
             <p class="text-center text-sm text-gray-500 my-4">or</p>
-            <button class="w-full bg-blue-600 text-white px-6 py-2 rounded mb-4 hover:bg-blue-700">📷 Capture with Camera</button>
+            <button id="camera-btn" type="button" class="w-full bg-blue-600 text-white px-6 py-2 rounded mb-4 hover:bg-blue-700">📷 Capture with
+                Camera</button>
+            <!-- Camera Modal -->
+            <div id="camera-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
+                <div class="bg-white rounded-lg shadow-lg w-11/12 max-w-xl p-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="font-semibold">Capture Photo</h4>
+                        <button id="close-modal" class="text-gray-500 hover:text-gray-800">✕</button>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-black rounded overflow-hidden">
+                            <video id="camera-video" autoplay playsinline class="w-full h-64 object-cover"></video>
+                        </div>
+                        <div class="text-center">
+                            <canvas id="camera-canvas" class="w-full h-64 hidden"></canvas>
+                            <div class="mt-3 text-sm text-gray-600">Align and capture a clear photo of the soil.</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-4 justify-end">
+                        <button id="snap-btn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Capture</button>
+                        <button id="use-btn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 hidden">Use Photo</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Loading overlay -->
+            <div id="loading-overlay" class="fixed inset-0 bg-white/70 hidden items-center justify-center z-40">
+                <div class="flex items-center gap-3 text-gray-700">
+                    <svg class="animate-spin h-6 w-6 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    <span>Analyzing image…</span>
+                </div>
+            </div>
         </div>
         <!-- Results -->
         <div class="bg-white rounded-lg shadow p-8 text-center">
             <h3 class="text-xl font-bold mb-6">Analysis Results</h3>
             <div class="border border-gray-300 p-8 rounded-lg">
-                {% if prediction and image_url %}
-                    <img src="/{{ image_url }}" alt="Uploaded Image" class="img-fluid mx-auto mb-4" style="max-height: 150px;">
-                    <h5 class="text-lg font-semibold">Prediction: <span class="text-green-600">{{ prediction|capitalize }}</span></h5>
-                {% else %}
-                    <div class="text-4xl text-gray-400 mb-4">🖼️</div>
-                    <p class="text-gray-500">Upload an image to see results</p>
+                <!--changes---------------------------------------------------------------------->
+                {% if prediction %}
+                <div class="result-card">
+                    <h3 class="result-title">
+                        Predicted Fertility: <strong>{{ prediction }}</strong>
+                    </h3>
+                    <h3 class="result-title">
+                        Confidence: {{ confidence|round(2) }}%
+                    </h3>
+                    <img src="{{ image_url }}" alt="Uploaded Image" class="result-image">
+
+                    {% if all_preds %}
+                    <h3 class="result-title">Class Probabilities:</h3>
+                    <ul>
+                        {% for label, prob in all_preds.items() %}
+                        <li>{{ label }}: {{ prob|round(2) }}%</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
                 {% endif %}
+                <!--changes-------------------------------------------------------------->
             </div>
         </div>
     </div>
 </section>
+<script>
+    (function () {
+        const form = document.getElementById('predict-form');
+        const fileInput = document.getElementById('file-input');
+        const dropZone = document.getElementById('drop-zone');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('preview-img');
+        const submitBtn = document.getElementById('submit-btn');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        const cameraBtn = document.getElementById('camera-btn');
+        const cameraModal = document.getElementById('camera-modal');
+        const closeModal = document.getElementById('close-modal');
+        const video = document.getElementById('camera-video');
+        const canvas = document.getElementById('camera-canvas');
+        const snapBtn = document.getElementById('snap-btn');
+        const useBtn = document.getElementById('use-btn');
+        let stream;
+
+        function showPreview(file) {
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            previewImg.src = url;
+            preview.classList.remove('hidden');
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            showPreview(file);
+        });
+
+        // Drag & Drop
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('border-green-500');
+            });
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('border-green-500');
+            });
+        });
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            if (!dt || !dt.files || !dt.files.length) return;
+            const file = dt.files[0];
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            showPreview(file);
+        });
+
+        // Show loading when submitting
+        form.addEventListener('submit', () => {
+            submitBtn.disabled = true;
+            loadingOverlay.classList.remove('hidden');
+            loadingOverlay.classList.add('flex');
+        });
+
+        // Camera flow
+        async function openCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                cameraModal.classList.remove('hidden');
+                cameraModal.classList.add('flex');
+                canvas.classList.add('hidden');
+                useBtn.classList.add('hidden');
+                snapBtn.classList.remove('hidden');
+            } catch (err) {
+                alert('Unable to access camera: ' + err.message);
+            }
+        }
+
+        function closeCamera() {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+            cameraModal.classList.add('hidden');
+            cameraModal.classList.remove('flex');
+        }
+
+        cameraBtn.addEventListener('click', openCamera);
+        closeModal.addEventListener('click', closeCamera);
+        cameraModal.addEventListener('click', (e) => {
+            if (e.target === cameraModal) closeCamera();
+        });
+
+        snapBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const w = video.videoWidth;
+            const h = video.videoHeight;
+            if (!w || !h) return;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, w, h);
+            canvas.classList.remove('hidden');
+            useBtn.classList.remove('hidden');
+            snapBtn.classList.add('hidden');
+        });
+
+        useBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            canvas.toBlob((blob) => {
+                if (!blob) return;
+                const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                showPreview(file);
+                closeCamera();
+            }, 'image/jpeg', 0.9);
+        });
+    })();
+</script>
 {% endblock %}

@@ -1,12 +1,23 @@
+# NOTE: Ensure 'class_indices.json' is present in the project directory.
+# This file is required for class label mapping in predictions.
+# If not present, download it from the model repository or contact the administrator.
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import os
+
+# Ensure this env var is set BEFORE TensorFlow imports to suppress oneDNN op-order noise
+os.environ.setdefault('TF_ENABLE_ONEDNN_OPTS', '0')
+
 import numpy as np
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.models import load_model
+from tensorflow.keras.utils import load_img, img_to_array
+from tensorflow.keras.models import load_model, model_from_json
+from tensorflow.keras import layers, Model
+from tensorflow.keras.applications import MobileNetV2
 from supabase import create_client
 from dotenv import load_dotenv
 import bcrypt
 import pandas as pd
+import json
 load_dotenv()
 
 app = Flask(__name__)
@@ -44,15 +55,109 @@ def get_supabase_client():
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Load your model
-model = load_model('soil_fertility_model.h5')
+# Load your model (updated)
+MODEL_PATH = 'mobilenetv2_soil_finetuned_final.h5'
+CLASS_INDICES_PATH = 'class_indices.json'
 
-# Class labels
-labels = sorted(['high', 'medium', 'low'])
+def _try_load_model(path):
+    """
+    Try loading a Keras .h5 model. If it fails due to common architecture mismatches
+    provide actionable error messages and try fallback savedmodel dir if present.
+    """
+    # 1) direct .h5
+    try:
+        print(f"Attempting to load Keras model from: {path}")
+        return load_model(path, compile=False)
+    except Exception as e:
+        err = str(e)
+        print("Primary .h5 load failed:", err)
+        # 2) fallback: try SavedModel directory with same base name
+        savedmodel_dir = os.path.splitext(path)[0]
+        if os.path.isdir(savedmodel_dir):
+            try:
+                print(f"Attempting to load SavedModel from directory: {savedmodel_dir}")
+                return load_model(savedmodel_dir, compile=False)
+            except Exception as e2:
+                print("SavedModel fallback failed:", str(e2))
+                # continue to raise informative error below
+                err = f"{err}\nSavedModel fallback error: {e2}"
+
+        # 3) Specific mismatch diagnostics
+        if "expects 1 input(s)" in err or "received 2 input tensors" in err or "expects" in err and "input" in err:
+            raise ValueError(
+                "Model load failed due to an input/tensor mismatch. Likely causes:\n"
+                "- The .h5 was saved from a functional/multi-input model different from the current environment.\n"
+                "- The model uses custom layers/objects not available in this environment.\n\n"
+                "Recommended actions:\n"
+                "1) Re-save the model on the training machine as a SavedModel directory: `model.save('model_dir', save_format='tf')` and copy the directory here.\n"
+                "2) Or save architecture + weights separately: `open('model.json','w').write(model.to_json())` and `model.save_weights('weights.h5')`, then load architecture+weights.\n"
+                "3) If custom layers were used, load with `load_model(..., custom_objects={...})`.\n\n"
+                f"Original load errors:\n{err}"
+            )
+        # 4) otherwise re-raise the original exception
+        raise
+
+# validate files
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}. Please ensure the file exists in the project directory or provide a SavedModel folder named '{os.path.splitext(MODEL_PATH)[0]}'.")
+
+if not os.path.exists(CLASS_INDICES_PATH):
+    raise FileNotFoundError(f"Class indices file not found: {CLASS_INDICES_PATH}. Please ensure the file exists in the project directory.")
+
+# Load class mapping from JSON early (needed for reconstruction fallback)
+with open(CLASS_INDICES_PATH, 'r') as f:
+    class_indices = json.load(f)
+idx2class = {v: k for k, v in class_indices.items()}
+num_classes = len(class_indices)
+
+
+def _reconstruct_mobilenetv2(num_classes: int):
+    """Rebuild a typical MobileNetV2 fine-tune head and return the model.
+    Assumptions:
+    - input size 224x224x3
+    - include_top=False
+    - GlobalAveragePooling2D
+    - Dense num_classes softmax
+    """
+    base = MobileNetV2(input_shape=(224, 224, 3), include_top=False, weights=None)
+    x = layers.GlobalAveragePooling2D(name='avg_pool')(base.output)
+    outputs = layers.Dense(num_classes, activation='softmax', name='predictions')(x)
+    return Model(inputs=base.input, outputs=outputs, name='mobilenetv2_soil')
+
+# Try loading model from .h5, SavedModel, or architecture+weights
+try:
+    model = _try_load_model(MODEL_PATH)
+except Exception as e_h5:
+    print("Primary and SavedModel load failed. Trying model.json + weights.h5 fallback.")
+    model = None
+    model_json_path = 'mobilenetv2_architecture_fine_tune.json'
+    weights_path = 'mobilenetv2_fine_tune.weights.h5'
+    if os.path.exists(model_json_path) and os.path.exists(weights_path):
+        try:
+            with open(model_json_path, 'r') as f:
+                model = model_from_json(f.read())
+            model.load_weights(weights_path)
+            print("Loaded model from mobilenetv2_architecture_fine_tune.json and weights.")
+        except Exception as e_json:
+            print("JSON + weights load failed:", str(e_json))
+    # If still not loaded, try reconstructing the model and loading weights
+    if model is None and os.path.exists(weights_path):
+        try:
+            print("Attempting to reconstruct MobileNetV2 and load weights…")
+            model = _reconstruct_mobilenetv2(num_classes)
+            model.load_weights(weights_path)
+            print("Loaded weights into reconstructed MobileNetV2 model.")
+        except Exception as e_rec:
+            print("Reconstruction + weights load failed:", str(e_rec))
+    if model is None:
+        # Re-raise the original error for visibility if all fallbacks fail
+        raise e_h5
+
+IMG_SIZE = 224
 
 def preprocess_image(img_path):
-    img = image.load_img(img_path, target_size=(180, 180))
-    img_array = image.img_to_array(img) / 255.0
+    img = load_img(img_path, target_size=(IMG_SIZE, IMG_SIZE))
+    img_array = img_to_array(img) / 255.0
     return np.expand_dims(img_array, axis=0)
 
 
@@ -67,7 +172,10 @@ def about():
 @app.route('/prediction', methods=['GET', 'POST'])
 def prediction():
     prediction_result = None
+    confidence = None
     image_url = None
+    all_preds = {}
+    # Use labels from class_indices mapping
     if request.method == 'POST':
         file = request.files.get('image')
         if file and file.filename:
@@ -77,12 +185,21 @@ def prediction():
             file.save(filepath)
 
             img_tensor = preprocess_image(filepath)
-            preds = model.predict(img_tensor)
-            predicted_index = np.argmax(preds)
-            prediction_result = labels[predicted_index]
-            image_url = filepath
+            preds = model.predict(img_tensor)[0]
 
-    return render_template('prediction.html', prediction=prediction_result, image_url=image_url)
+            predicted_index = int(np.argmax(preds))
+            prediction_result = idx2class.get(predicted_index, str(predicted_index))
+            confidence = float(preds[predicted_index]) * 100
+            image_url = filepath
+            all_preds = {idx2class.get(i, str(i)): float(preds[i]) * 100 for i in range(len(preds))}
+
+    return render_template(
+        'prediction.html',
+        prediction=prediction_result,
+        confidence=confidence,
+        image_url=image_url,
+        all_preds=all_preds
+    )
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
